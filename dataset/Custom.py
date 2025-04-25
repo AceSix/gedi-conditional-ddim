@@ -1,6 +1,7 @@
 import torch
 from torch.utils.data import DataLoader, Dataset
-from pathlib2 import Path, Iterable
+from pathlib2 import Path
+from collections.abc import Iterable
 from typing import Union, Iterable
 from PIL import Image
 from torchvision import transforms
