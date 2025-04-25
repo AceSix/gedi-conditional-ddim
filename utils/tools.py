@@ -64,8 +64,8 @@ def train_one_epoch(trainer, train_loader, val_loader, optimizer, device, epoch,
             cond = cond.to(device, non_blocking=True)
 
             loss = trainer(x_0, cond)
-            val_running_loss += loss.detach().cpu().numpy() * x_0.size(0) 
-            val_seen_samples += x_0.size(0)
+            val_loss += loss.detach().cpu().numpy() * x_0.size(0) 
+            val_n += x_0.size(0)
 
     print(f"Epoch: {epoch}  Train Loss: {train_loss/train_n:.6f}  Val loss: {val_loss / val_n:.6f}")
             
