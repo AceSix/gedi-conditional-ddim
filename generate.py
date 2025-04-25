@@ -1,7 +1,7 @@
 from utils.engine import DDPMSampler, DDIMSampler
 from model.UNet import UNet
 import torch
-from utils.tools import save_sample_image, save_image
+from utils.tools import save_sample_image, save_image, save_sample_waveform_plot, save_waveform_plot
 from argparse import ArgumentParser
 
 
@@ -9,7 +9,7 @@ def parse_option():
     parser = ArgumentParser()
     parser.add_argument("-cp", "--checkpoint_path", type=str, required=True)
     parser.add_argument("--device", type=str, default="cuda")
-    parser.add_argument("--sampler", type=str, default="ddpm", choices=["ddpm", "ddim"])
+    parser.add_argument("--sampler", type=str, default="ddim", choices=["ddpm", "ddim"])
 
     # generator param
     parser.add_argument("-bs", "--batch_size", type=int, default=16)
@@ -28,6 +28,9 @@ def parse_option():
     parser.add_argument("--show", default=False, action="store_true")
     parser.add_argument("-sp", "--image_save_path", type=str, default=None)
     parser.add_argument("--to_grayscale", default=False, action="store_true")
+
+    # gedi specific
+    parser.add_argument("--waveform", default=True, action="store_true")
 
     args = parser.parse_args()
     return args
@@ -52,17 +55,32 @@ def generate(args):
         raise ValueError(f"Unknown sampler: {args.sampler}")
 
     # generate Gaussian noise
-    z_t = torch.randn((args.batch_size, cp["config"]["Model"]["in_channels"],
+    if not args.waveform:
+        z_t = torch.randn((args.batch_size, cp["config"]["Model"]["in_channels"],
                        *cp["config"]["Dataset"]["image_size"]), device=device)
+    else:
+        z_t = torch.randn((args.batch_size, cp["config"]["Model"]["in_channels"], 512),
+                          device=device)
+
+        print(f"z_t shape: {z_t.shape}")
+
 
     extra_param = dict(steps=args.steps, eta=args.eta, method=args.method)
     x = sampler(z_t, only_return_x_0=args.result_only, interval=args.interval, **extra_param)
 
-    if args.result_only:
-        save_image(x, nrow=args.nrow, show=args.show, path=args.image_save_path, to_grayscale=args.to_grayscale)
+    print(f"x shape: {x.shape}")
+    
+    if not args.waveform:
+        if args.result_only:
+            save_image(x, nrow=args.nrow, show=args.show, path=args.image_save_path, to_grayscale=args.to_grayscale)
+        else:
+            save_sample_image(x, show=args.show, path=args.image_save_path, to_grayscale=args.to_grayscale)
     else:
-        save_sample_image(x, show=args.show, path=args.image_save_path, to_grayscale=args.to_grayscale)
-
+        if args.result_only:
+            save_waveform_plot(x, path=args.image_save_path)
+        else:
+            save_sample_waveform_plot(x, path=args.image_save_path)
+        
 
 if __name__ == "__main__":
     args = parse_option()

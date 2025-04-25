@@ -14,7 +14,9 @@ def train(config):
     print(config)
 
     device = torch.device(config["device"])
-    loader = create_dataset(**config["Dataset"])
+    train_loader = create_dataset(**config["TrainDataset"])
+    val_loader = create_dataset(**config["ValDataset"])
+    #test_loader = create_dataset(**config["TestDataset"])
     start_epoch = 1
 
     model = UNet(**config["Model"]).to(device)
@@ -30,7 +32,7 @@ def train(config):
         start_epoch = cp["start_epoch"] + 1
 
     for epoch in range(start_epoch, config["epochs"] + 1):
-        loss = train_one_epoch(trainer, loader, optimizer, device, epoch)
+        loss = train_one_epoch(trainer, train_loader, val_loader, optimizer, device, epoch)
         model_checkpoint.step(loss, model=model.state_dict(), config=config,
                               optimizer=optimizer.state_dict(), start_epoch=epoch,
                               model_checkpoint=model_checkpoint.state_dict())

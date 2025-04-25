@@ -1,10 +1,14 @@
-from typing import Optional, Union
+import math
+import numpy as np
 import torch
-from tqdm import tqdm
-from torchvision.utils import make_grid
-from PIL import Image
-from pathlib2 import Path
 import yaml
+from pathlib2 import Path
+from PIL import Image
+from tqdm import tqdm
+from typing import Optional, Tuple, Union
+from torchvision.utils import make_grid
+import os
+import matplotlib.pyplot as plt
 
 
 def load_yaml(yml_path: Union[Path, str], encoding="utf-8"):
@@ -15,29 +19,58 @@ def load_yaml(yml_path: Union[Path, str], encoding="utf-8"):
         return cfg
 
 
-def train_one_epoch(trainer, loader, optimizer, device, epoch):
+def train_one_epoch(trainer, train_loader, val_loader, optimizer, device, epoch, grad_clip=3.0):
+    
     trainer.train()
-    total_loss, total_num = 0., 0
+    train_loss = 0.0
+    train_n = 0
 
-    with tqdm(loader, dynamic_ncols=True, colour="#ff924a") as data:
-        for images, _ in data:
-            optimizer.zero_grad()
-
-            x_0 = images.to(device)
-            loss = trainer(x_0)
-
+    optimizer.zero_grad()
+    
+    # each batch
+    with tqdm(train_loader, dynamic_ncols=True, colour="#ff924a") as data:
+        for images, cond in data:
+            
+            x_0 = images.to(device, non_blocking=True)
+            cond = cond.to(device, non_blocking=True)
+            
+            loss = trainer(x_0, cond)
             loss.backward()
             optimizer.step()
 
-            total_loss += loss.item()
-            total_num += x_0.shape[0]
+            # optional gradient-clipping avoids NaNs
+            torch.nn.utils.clip_grad_norm_(trainer.parameters(),
+                                            max_norm=grad_clip)
+            optimizer.step()
+            optimizer.zero_grad()
+
+            # update stats (detach frees the graph)
+            train_loss += loss.detach().cpu().numpy() * x_0.size(0) 
+            train_n += x_0.size(0)
 
             data.set_description(f"Epoch: {epoch}")
             data.set_postfix(ordered_dict={
-                "train_loss": total_loss / total_num,
+                "train_loss": train_loss / train_n,
             })
 
-    return total_loss / total_num
+    # validation
+    trainer.eval()
+
+    val_loss = 0.0
+    val_n = 0
+    with torch.no_grad():
+        for images, cond in val_loader:
+            x_0 = images.to(device, non_blocking=True)
+            cond = cond.to(device, non_blocking=True)
+
+            loss = trainer(x_0, cond)
+            val_running_loss += loss.detach().cpu().numpy() * x_0.size(0) 
+            val_seen_samples += x_0.size(0)
+
+    print(f"Epoch: {epoch}  Train Loss: {train_loss/train_n:.6f}  Val loss: {val_loss / val_n:.6f}")
+            
+    return train_loss / train_n
+
 
 
 def save_image(images: torch.Tensor, nrow: int = 8, show: bool = True, path: Optional[str] = None,
@@ -110,3 +143,144 @@ def save_sample_image(images: torch.Tensor, show: bool = True, path: Optional[st
     if show:
         im.show()
     return grid
+
+
+
+
+def save_waveform_plot(waveforms: torch.Tensor, nrow: int = 8, show: bool = True, 
+                       path: Optional[str] = None,
+                       xlim: Optional[Tuple[float, float]] = None, 
+                       ylim: Optional[Tuple[float, float]] = None,
+                       figsize: Optional[Tuple[float, float]] = None,
+                       title: Optional[str] = None):
+    """
+    Plot waveforms (line plots) in a grid with fixed x and y limits.
+    
+    Parameters:
+        waveforms: a torch.Tensor of shape (batch_size, num_samples, num_channels, length).
+                   For this function, num_samples is expected to be 1.
+        nrow: number of waveforms per row (if multiple waveforms).
+        show: whether to display the plot.
+        path: file path to save the plot. If None, the plot is not saved.
+        xlim: tuple (xmin, xmax) for x-axis limits. If None, defaults to (0, length-1).
+        ylim: tuple (ymin, ymax) for y-axis limits. If None, no fixed y limits.
+        figsize: figure size. If None, computed automatically.
+    
+    Returns:
+        The matplotlib Figure object.
+    """
+    if waveforms.ndim != 4:
+        raise ValueError("Expected waveforms tensor of shape (batch_size, num_samples, num_channels, length)")
+    batch_size, num_samples, num_channels, length = waveforms.shape
+    if num_samples != 1:
+        raise ValueError(f"Expected num_samples==1 for save_waveform_plot, but got {num_samples}")
+    
+    # Remove the sample dimension so that each item is (num_channels, length)
+    waveforms = waveforms.squeeze(1)  # now shape: (batch_size, num_channels, length)
+
+    # Set default x-axis limits if not provided.
+    if xlim is None:
+        xlim = (0, length - 1)
+    
+    # Determine grid dimensions.
+    ncols = nrow
+    nrows = math.ceil(batch_size / ncols)
+    if figsize is None:
+        figsize = (ncols * 3, nrows * 2)
+    
+    fig, axes = plt.subplots(nrows, ncols, figsize=figsize, squeeze=False)
+    axes = axes.flatten()
+    if title is not None:
+        fig.suptitle(title)
+    
+    x = np.arange(length)
+    for i in range(batch_size):
+        ax = axes[i]
+        # waveform shape: (num_channels, length)
+        waveform = waveforms[i].detach().cpu().numpy()
+        # Plot each channel (overlayed)
+        for ch in range(num_channels):
+            ax.plot(x, waveform[ch], label=f"Ch {ch}")
+        ax.set_xlim(xlim)
+        if ylim is not None:
+            ax.set_ylim(ylim)
+        ax.set_title(f"Waveform {i}")
+        if num_channels > 1:
+            ax.legend()
+    
+    # Hide extra axes if batch_size < nrows*ncols.
+    for j in range(batch_size, len(axes)):
+        axes[j].axis("off")
+    
+    plt.tight_layout()
+    if path is not None:
+        os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
+        plt.savefig(path)
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+    return fig
+
+def save_sample_waveform_plot(waveforms: torch.Tensor, show: bool = True, 
+                              path: Optional[str] = None,
+                              xlim: Optional[Tuple[float, float]] = None, 
+                              ylim: Optional[Tuple[float, float]] = None,
+                              figsize: Optional[Tuple[float, float]] = None,
+                              title: Optional[str] = None):
+    """
+    Plot sample waveforms (line plots) in a grid. Expects a tensor with shape 
+    (batch_size, num_samples, num_channels, length). Each row in the grid corresponds 
+    to a batch sample and each column corresponds to one of the intermediate process samples.
+    
+    Parameters:
+        waveforms: a torch.Tensor of shape (batch_size, num_samples, num_channels, length)
+        show: whether to display the plot.
+        path: file path to save the plot. If None, the plot is not saved.
+        xlim: tuple (xmin, xmax) for x-axis limits. If None, defaults to (0, length-1).
+        ylim: tuple (ymin, ymax) for y-axis limits. If None, no fixed y limits.
+        figsize: figure size. If None, computed automatically.
+    
+    Returns:
+        The matplotlib Figure object.
+    """
+    
+    if waveforms.ndim != 4:
+        raise ValueError("Expected waveforms tensor of shape (batch_size, num_samples, num_channels, length)")
+    batch_size, num_samples, num_channels, length = waveforms.shape
+
+    if xlim is None:
+        xlim = (0, length - 1)
+    
+    if figsize is None:
+        figsize = (num_samples * 3, batch_size * 2)
+    
+    fig, axes = plt.subplots(batch_size, num_samples, figsize=figsize, squeeze=False)
+    if title is not None:
+        fig.suptitle(title)
+        
+    x = np.arange(length)
+    for i in range(batch_size):
+        for j in range(num_samples):
+            ax = axes[i, j]
+            # waveform shape: (num_channels, length)
+            waveform = waveforms[i, j].detach().cpu().numpy()
+            for ch in range(num_channels):
+                ax.plot(x, waveform[ch], label=f"Ch {ch}")
+            ax.set_xlim(xlim)
+            if ylim is not None:
+                ax.set_ylim(ylim)
+            ax.set_title(f"Batch {i}, Sample {j}")
+            if num_channels > 1:
+                ax.legend()
+    
+    plt.tight_layout()
+    
+    if path is not None:
+        os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
+        plt.savefig(path)
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+    return fig
