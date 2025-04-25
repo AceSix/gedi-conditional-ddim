@@ -192,11 +192,11 @@ class DDPMSampler(nn.Module):
 
 class DDIMSampler(nn.Module):
     def __init__(self, model, beta: Tuple[int, int], 
-                 T: int, guidance_scale: float = 2):
+                 T: int, guidance_scale: float = 2.5):
         super().__init__()
         self.model = model
         self.T = T
-        self.guidance_scale = guidance_scale
+        self.guidance_scale = guidance_scale # TODO: check cond
 
         # generate T steps of beta
         beta_t = torch.linspace(*beta, T, dtype=torch.float32)

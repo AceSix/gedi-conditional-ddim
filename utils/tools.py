@@ -19,7 +19,7 @@ def load_yaml(yml_path: Union[Path, str], encoding="utf-8"):
         return cfg
 
 
-def train_one_epoch(trainer, train_loader, val_loader, optimizer, device, epoch, grad_clip=3.0):
+def train_one_epoch(trainer, train_loader, val_loader, optimizer, device, epoch, grad_clip=1.0):
     
     trainer.train()
     train_loss = 0.0
@@ -36,9 +36,8 @@ def train_one_epoch(trainer, train_loader, val_loader, optimizer, device, epoch,
             
             loss = trainer(x_0, cond)
             loss.backward()
-            optimizer.step()
 
-            # optional gradient-clipping avoids NaNs
+            # optional gradient-clipping 
             torch.nn.utils.clip_grad_norm_(trainer.parameters(),
                                             max_norm=grad_clip)
             optimizer.step()

@@ -96,9 +96,9 @@ def generate(args):
     # IMPORTANT: Pass the conditioning tensor to the sampler.
     # Update: sampler now expects an extra "cond" argument.
     # Print extra_params for debugging
-    print("Debug - extra_params:")
-    for key, value in extra_param.items():
-        print(f"  {key}: {value}")
+    #print("Debug - extra_params:")
+    #for key, value in extra_param.items():
+    #    print(f"  {key}: {value}")
     x = sampler(z_t, cond=cond_tensor, only_return_x_0=args.result_only, interval=args.interval, **extra_param)
     
     print(f"x shape: {x.shape}")

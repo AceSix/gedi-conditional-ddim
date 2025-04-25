@@ -76,11 +76,11 @@ Callback:
 
 ### train params
 device: "cuda:0"
-epochs: 100  # 1000
+epochs: 15  # 1000
 # Whether to continue training, True or False
-consume: False
+consume: True
 # If continue training, which checkpoint to load
-consume_path: '' #"./checkpoint/gedi_treecover_e3.pth"
+consume_path: "./checkpoint/gedi_treecover_e4.pth"
 
 ### optimizer params
-lr: 0.0002 #0.0002
+lr: 0.00005 #0.0002
