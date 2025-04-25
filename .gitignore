@@ -1,3 +1,9 @@
-*.pth
 __pycache__
 *.pyc
+
+*.pth
+*.tar.gz
+*.pkl
+
+data/
+results/
