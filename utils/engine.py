@@ -192,7 +192,7 @@ class DDPMSampler(nn.Module):
 
 class DDIMSampler(nn.Module):
     def __init__(self, model, beta: Tuple[int, int], 
-                 T: int, guidance_scale: float = 2.5):
+                 T: int, guidance_scale: float = 1.5):
         super().__init__()
         self.model = model
         self.T = T
@@ -282,7 +282,7 @@ class DDIMSampler(nn.Module):
                 x_t = self.sample_one_step(x_t, time_steps[i], time_steps_prev[i], eta, cond, guidance_scale)
 
                 if not only_return_x_0 and ((steps - i) % interval == 0 or i == 0):
-                    x.append(torch.clamp(x_t, -1.0, 1.0))
+                    x.append(torch.clamp(x_t, -10.0, 10.0))
 
                 sampling_steps.set_postfix(ordered_dict={"step": i + 1, "sample": len(x)})
 

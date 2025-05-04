@@ -10,7 +10,7 @@ def train(config):
     consume = config["consume"]
     if consume:
         cp = torch.load(config["consume_path"])
-        config = cp["config"]
+        #config = cp["config"]
     print(config)
 
     device = torch.device(config["device"])
@@ -20,7 +20,7 @@ def train(config):
     start_epoch = 1
 
     model = UNet(**config["Model"]).to(device)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"], weight_decay=5e-4)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"], weight_decay=3e-4)
     trainer = GaussianDiffusionTrainer(model, **config["Trainer"]).to(device)
 
     model_checkpoint = ModelCheckpoint(**config["Callback"])

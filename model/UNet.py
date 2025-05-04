@@ -273,10 +273,10 @@ class UNet(nn.Module):
             assert cond.shape[0] == x.shape[0], "Batch sizes of x and cond must match."
             cond_emb = self.cond_embed(cond)
             
-        # When training, apply dropout to the conditioning embedding.
+        # When training, apply dropout to the conditioning embedding. Current dropout rate 15%
         if self.training:
             keep = torch.bernoulli(torch.full((cond_emb.size(0),1),
-                                            0.9, device=cond_emb.device))
+                                            0.85, device=cond_emb.device))
             cond_emb = cond_emb * keep      
 
         '''print("x shape:", x.shape)

@@ -1,6 +1,7 @@
 import math
 import numpy as np
 import torch
+from torch.amp import autocast
 import yaml
 from pathlib2 import Path
 from PIL import Image
@@ -33,14 +34,24 @@ def train_one_epoch(trainer, train_loader, val_loader, optimizer, device, epoch,
             
             x_0 = images.to(device, non_blocking=True)
             cond = cond.to(device, non_blocking=True)
-            
-            loss = trainer(x_0, cond)
+
+
+            #loss = trainer(x_0, cond)
+            with autocast('cuda', dtype=torch.bfloat16):
+                loss = trainer(x_0, cond)
             loss.backward()
+            #scaler.scale(loss).backward()
 
             # optional gradient-clipping 
             torch.nn.utils.clip_grad_norm_(trainer.parameters(),
                                             max_norm=grad_clip)
             optimizer.step()
+            #if grad_clip:
+            #    scaler.unscale_(optimizer)
+            #    torch.nn.utils.clip_grad_norm_(trainer.parameters(), grad_clip)
+            #scaler.step(optimizer)
+            #scaler.update()
+            
             optimizer.zero_grad()
 
             # update stats (detach frees the graph)
