@@ -74,22 +74,32 @@ class GaussianDiffusionTrainer(nn.Module):
         self.register_buffer("signal_rate", torch.sqrt(alpha_t_bar))
         self.register_buffer("noise_rate", torch.sqrt(1.0 - alpha_t_bar))
 
+        # Optional: store log(ᾱₜ) once to avoid log/exp in KL‑loss variants
+        self.register_buffer("log_alpha_bar", torch.log(alpha_t_bar))
 
-    def forward(self, x_0, cond, gamma=5.0):
+
+    def forward(self, x_0, cond, drop_prob=0.2):
         # get a random training step $t \sim Uniform({1, ..., T})$
-        B = x_0.shape[0]
-        t = torch.randint(self.T, size=(B,), device=x_0.device)
-
+        B, dtype, device = x_0.size(0), x_0.dtype, x_0.device
+        
+        # 1. sample time‑step t and add noise
+        t = torch.randint(self.T, size=(B,), device=device)
+        
         # generate $\epsilon \sim N(0, 1)$
-        epsilon = torch.randn_like(x_0)
+        epsilon = torch.randn_like(x_0, dtype=dtype)
 
         # predict the noise added from $x_{t-1}$ to $x_t$
         x_t = (extract(self.signal_rate, t, x_0.shape) * x_0 +
                extract(self.noise_rate , t, x_0.shape) * epsilon)
 
-        
-        epsilon_theta = self.model(x_t, t, cond)
-        loss = F.mse_loss(epsilon_theta, epsilon, reduction="mean")
+        # 2. decide which items are unconditional
+        mask = torch.rand(B, device=device) < drop_prob
+        cond = cond.clone()
+        cond[mask] = torch.ones_like(cond[mask]) * -1.0  # cond vectors are 0-1, so -1 represents no condition
+
+        # 3. predict the noise
+        eps_theta = self.model(x_t, t, cond)
+        loss = F.mse_loss(eps_theta, epsilon, reduction="mean")
 
         '''# v prediction
         v_target = (extract(self.signal_rate, t, x_0.shape) * epsilon - 
@@ -221,7 +231,8 @@ class DDIMSampler(nn.Module):
 
         # two forward passes of predicting noise
         epsilon_cond = self.model(x_t, t, cond)
-        epsilon_uncond = self.model(x_t, t)
+        null_cond = torch.full_like(cond, -1)
+        epsilon_uncond = self.model(x_t, t, null_cond)
         # calculate the final epsilon
         epsilon_theta_t = epsilon_uncond + guidance_scale * (epsilon_cond - epsilon_uncond)
 
@@ -238,7 +249,7 @@ class DDIMSampler(nn.Module):
 
 
     @torch.no_grad()
-    def forward(self, x_t, steps: int = 1, method="linear", eta=0.0,
+    def forward(self, x_t, steps: int = 1, method="linear", eta=0.1,
                 only_return_x_0: bool = True, interval: int = 1, cond = None, guidance_scale = None):
         """
         Parameters:

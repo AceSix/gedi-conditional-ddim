@@ -1,5 +1,4 @@
 import math
-from matplotlib import scale
 import torch
 from torch import nn
 from torch.nn import init
@@ -168,7 +167,7 @@ class UNet(nn.Module):
             channel_mult=(1, 2, 2, 2),
             conv_resample=True,
             num_heads=4,
-            cond_dim=None
+            cond_dim=1
     ):
         super().__init__()
         self.in_channels = in_channels
@@ -181,23 +180,24 @@ class UNet(nn.Module):
         self.conv_resample = conv_resample
         self.num_heads = num_heads
 
-        # Time embedding network.
-        time_embed_dim = model_channels * 4
+        self.time_embed_dim = model_channels * 4
+        self.cond_embed_dim = model_channels * 4
+        self.emb_dim = self.time_embed_dim + self.cond_embed_dim # concatenate time and cond embeddings
+
+        # Time embedding network.        
         self.time_embed = nn.Sequential(
-            nn.Linear(model_channels, time_embed_dim),
+            nn.Linear(model_channels, self.time_embed_dim),
             nn.SiLU(),
-            nn.Linear(time_embed_dim, time_embed_dim),
+            nn.Linear(self.time_embed_dim, self.time_embed_dim),
         )
 
-        # Conditioning embe
-        if cond_dim is not None:
-            self.cond_embed = nn.Sequential(                   
-            nn.Linear(cond_dim, time_embed_dim),
+        # Conditioning embedding
+        self.cond_embed = nn.Sequential(                   
+            nn.Linear(cond_dim, self.cond_embed_dim),
             nn.SiLU(),
-            nn.Linear(time_embed_dim, time_embed_dim),
-        )
-        else:
-            self.cond_embed = None
+            nn.Linear(self.cond_embed_dim, self.cond_embed_dim),
+            )
+
 
         # Downsample blocks.
         self.down_blocks = nn.ModuleList([
@@ -208,7 +208,7 @@ class UNet(nn.Module):
         ds = 1
         for level, mult in enumerate(channel_mult):
             for _ in range(num_res_blocks):
-                layers = [ResidualBlock(ch, mult * model_channels, time_embed_dim, dropout)]
+                layers = [ResidualBlock(ch, mult * model_channels, self.emb_dim, dropout)]
                 ch = mult * model_channels
                 if ds in attention_resolutions:
                     layers.append(AttentionBlock(ch, num_heads=num_heads))
@@ -221,9 +221,9 @@ class UNet(nn.Module):
 
         # Middle block.
         self.middle_block = TimestepEmbedSequential(
-            ResidualBlock(ch, ch, time_embed_dim, dropout),
+            ResidualBlock(ch, ch, self.emb_dim, dropout),
             AttentionBlock(ch, num_heads=num_heads),
-            ResidualBlock(ch, ch, time_embed_dim, dropout)
+            ResidualBlock(ch, ch, self.emb_dim, dropout)
         )
 
         # Upsample blocks.
@@ -231,7 +231,7 @@ class UNet(nn.Module):
         for level, mult in list(enumerate(channel_mult))[::-1]:
             for i in range(num_res_blocks + 1):
                 layers = [
-                    ResidualBlock(ch + down_block_chans.pop(), model_channels * mult, time_embed_dim, dropout)
+                    ResidualBlock(ch + down_block_chans.pop(), model_channels * mult, self.emb_dim, dropout)
                 ]
                 ch = model_channels * mult
                 if ds in attention_resolutions:
@@ -248,7 +248,7 @@ class UNet(nn.Module):
             nn.Conv1d(ch, out_channels, kernel_size=3, padding=1),
         )
 
-    def forward(self, x, timesteps, cond=None):
+    def forward(self, x, timesteps, cond):
         """
         x: [B, C, L] tensor of inputs.
         timesteps: a 1-D tensor of timesteps.
@@ -260,25 +260,9 @@ class UNet(nn.Module):
         hs = []
         # Compute time embedding.  shape: [B, time_embed_dim]
         time_emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
+        cond_emb = self.cond_embed(cond)                  # gradients update MLP
+        emb = torch.cat([time_emb, cond_emb], dim=1)
         
-
-        # Compute conditioning embedding. shape: [B, time_embed_dim]
-        if self.cond_embed is None or cond is None:
-            cond_emb = torch.zeros_like(time_emb)
-            
-        # use conditioning
-        else:
-            # Ensure cond is 2D and matches the batch size of x.
-            assert cond.dim() == 2, "Conditioning input must be 2D."
-            assert cond.shape[0] == x.shape[0], "Batch sizes of x and cond must match."
-            cond_emb = self.cond_embed(cond)
-            
-        # When training, apply dropout to the conditioning embedding. Current dropout rate 15%
-        if self.training:
-            keep = torch.bernoulli(torch.full((cond_emb.size(0),1),
-                                            0.85, device=cond_emb.device))
-            cond_emb = cond_emb * keep      
-
         '''print("x shape:", x.shape)
         print("x mean:", x.mean(), "std:", x.std())
         print("time_emb shape:", time_emb.shape)
@@ -287,10 +271,6 @@ class UNet(nn.Module):
         print("cond_emb shape:", cond_emb.shape)
         print("cond_emb mean:", cond_emb.mean(), "std:", cond_emb.std())
         print("cond_emb min:", cond_emb.min(), "max:", cond_emb.max())'''
-        
-
-        emb = time_emb + cond_emb
-
         
         # Downsample stage.
         h = x

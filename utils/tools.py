@@ -11,6 +11,17 @@ from torchvision.utils import make_grid
 import os
 import matplotlib.pyplot as plt
 
+def extract(v, i, shape):
+    """
+    Get the i-th number in v, and the shape of v is mostly (T, ), the shape of i is mostly (batch_size, ).
+    equal to [v[index] for index in i]
+    """
+    out = torch.gather(v, index=i, dim=0)
+    out = out.to(device=i.device, dtype=torch.float32)
+
+    # reshape to (batch_size, 1, 1, 1, 1, ...) for broadcasting purposes.
+    out = out.view([i.shape[0]] + [1] * (len(shape) - 1))
+    return out
 
 def load_yaml(yml_path: Union[Path, str], encoding="utf-8"):
     if isinstance(yml_path, str):
@@ -20,7 +31,7 @@ def load_yaml(yml_path: Union[Path, str], encoding="utf-8"):
         return cfg
 
 
-def train_one_epoch(trainer, train_loader, val_loader, optimizer, device, epoch, grad_clip=1.0):
+def train_one_epoch(trainer, loader, val_loader, optimizer, device, epoch, ema, grad_clip=1.0):
     
     trainer.train()
     train_loss = 0.0
@@ -29,57 +40,76 @@ def train_one_epoch(trainer, train_loader, val_loader, optimizer, device, epoch,
     optimizer.zero_grad()
     
     # each batch
-    with tqdm(train_loader, dynamic_ncols=True, colour="#ff924a") as data:
+    with tqdm(loader, dynamic_ncols=True, colour="#ff924a") as data:
         for images, cond in data:
             
             x_0 = images.to(device, non_blocking=True)
             cond = cond.to(device, non_blocking=True)
 
-
             #loss = trainer(x_0, cond)
             with autocast('cuda', dtype=torch.bfloat16):
                 loss = trainer(x_0, cond)
             loss.backward()
-            #scaler.scale(loss).backward()
 
             # optional gradient-clipping 
-            torch.nn.utils.clip_grad_norm_(trainer.parameters(),
-                                            max_norm=grad_clip)
+            #torch.nn.utils.clip_grad_norm_(trainer.parameters(), max_norm=grad_clip)
             optimizer.step()
-            #if grad_clip:
-            #    scaler.unscale_(optimizer)
-            #    torch.nn.utils.clip_grad_norm_(trainer.parameters(), grad_clip)
-            #scaler.step(optimizer)
-            #scaler.update()
-            
+            #ema.update(trainer.model)
             optimizer.zero_grad()
 
             # update stats (detach frees the graph)
-            train_loss += loss.detach().cpu().numpy() * x_0.size(0) 
-            train_n += x_0.size(0)
+            B = x_0.size(0)
+            train_loss += loss.detach().cpu().numpy() * B
+            train_n += B
 
             data.set_description(f"Epoch: {epoch}")
             data.set_postfix(ordered_dict={
                 "train_loss": train_loss / train_n,
             })
+            
+    return train_loss / train_n
 
+
+
+
+def validate_one_epoch(trainer, loader, device, epoch):
+    
     # validation
     trainer.eval()
 
     val_loss = 0.0
+    val_gap  = 0.0
     val_n = 0
+    
     with torch.no_grad():
-        for images, cond in val_loader:
+        for images, cond in loader:
             x_0 = images.to(device, non_blocking=True)
             cond = cond.to(device, non_blocking=True)
+            B = x_0.size(0)
 
-            loss = trainer(x_0, cond)
-            val_loss += loss.detach().cpu().numpy() * x_0.size(0) 
-            val_n += x_0.size(0)
+            # -------- ordinary ε‑prediction loss -----------------------------
+            with autocast('cuda', dtype=torch.bfloat16):
+                loss = trainer(x_0, cond, drop_prob=0.0)      # <‑‑ no dropout in eval
+                val_loss += loss.item() * B
 
-    print(f"Epoch: {epoch}  Train Loss: {train_loss/train_n:.6f}  Val loss: {val_loss / val_n:.6f}")
+                t   = torch.randint(trainer.T, (B,), device=x_0.device)
+                eps = torch.randn_like(x_0, dtype=x_0.dtype)
+
+                # x_t from the forward‑diffusion equation
+                x_t = (extract(trainer.signal_rate, t, x_0.shape) * x_0 +
+                        extract(trainer.noise_rate , t, x_0.shape) * eps)
+
+                eps_c  = trainer.model(x_t, t, cond)   # conditional prediction
+                null_cond = torch.ones_like(cond) * -1.0
+                eps_uc = trainer.model(x_t, t, null_cond)   # unconditional prediction
+
+                gap = (eps_c - eps_uc).pow(2).mean(dim=[1, 2]).sqrt().mean()  # scalar
+                val_gap += gap.item() * B
+
+            val_n += B
             
-    return train_loss / train_n
+    return val_loss/val_n, val_gap/val_n
+
 
 
 
