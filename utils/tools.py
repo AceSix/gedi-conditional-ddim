@@ -95,6 +95,7 @@ def validate_one_epoch(trainer, loader, device, epoch):
 
                 t   = torch.randint(trainer.T, (B,), device=x_0.device)
                 eps = torch.randn_like(x_0, dtype=x_0.dtype)
+                eps = torch.clamp(eps, min=0.0)
 
                 # x_t from the forward‑diffusion equation
                 x_t = (extract(trainer.signal_rate, t, x_0.shape) * x_0 +
