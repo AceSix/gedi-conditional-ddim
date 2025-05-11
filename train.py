@@ -1,3 +1,4 @@
+import sched
 from dataset import create_dataset
 from model.UNet import UNet
 from utils.ema import EMA
@@ -24,7 +25,23 @@ def train(config):
     model = UNet(**config["Model"]).to(device)
     ema   = EMA(model, decay=0.9999)
     
-    optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"], weight_decay=3e-4)
+    optimizer = torch.optim.AdamW(model.parameters(), 
+                                  lr=config["lr"], 
+                                  betas=(0.9, 0.999), 
+                                  weight_decay=3e-4)
+
+    steps_per_epoch = len(train_loader)
+    total_steps = config["epochs"] * steps_per_epoch
+    warmup_steps = 0.1 * total_steps
+
+    def lr_lambda(step):
+        if step < warmup_steps:
+            return float(step) / float(max(1, warmup_steps))
+        else:
+            return max(0.0, float(total_steps - step) / float(max(1, total_steps - warmup_steps)))
+
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+    
     trainer = GaussianDiffusionTrainer(model, **config["Trainer"]).to(device)
 
     model_checkpoint = ModelCheckpoint(**config["Callback"])
@@ -35,8 +52,8 @@ def train(config):
         start_epoch = cp["start_epoch"] + 1
 
     for epoch in range(start_epoch, config["epochs"] + 1):
-        loss = train_one_epoch(trainer, train_loader, val_loader, optimizer, device, epoch, ema)
-
+        loss = train_one_epoch(trainer, train_loader, val_loader, optimizer, scheduler, device, epoch, ema)
+        
         if epoch % 2 == 0:
             # ------- validation every 3 epochs with EMA weights ----
             ema.store(model)
@@ -47,11 +64,13 @@ def train(config):
         model_checkpoint.step(
             loss,
             model=model.state_dict(),
+            ema_shadow=ema.shadow,
             config=config,
             optimizer=optimizer.state_dict(),
             start_epoch=epoch,
             model_checkpoint=model_checkpoint.state_dict()
         )
+        
 if __name__ == "__main__":
     config = load_yaml("config.yml", encoding="utf-8")
     train(config)

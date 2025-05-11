@@ -3,12 +3,12 @@ Model:
   in_channels: 1 #3
   out_channels: 1 #3
   model_channels: 128
-  attention_resolutions: [16, 32]
-  num_res_blocks: 3
+  attention_resolutions: [4, 8]
+  num_res_blocks: 4
   dropout: 0.1
-  channel_mult: [1, 2, 4, 8]
+  channel_mult: [1, 2, 4, 4]
   conv_resample: True
-  num_heads: 4
+  num_heads: 8
   cond_dim: 1
 
 
@@ -33,8 +33,8 @@ TrainDataset:
   #suffix: ["png", "jpg"]
 
   # parameters for torch.utils.data.DataLoader
-  batch_size: 320 #64
-  subset: 1
+  batch_size: 192 #64
+  subset: .2
   #drop_last: True
   pin_memory: True
   num_workers: 8
@@ -64,23 +64,23 @@ TestDataset:
 Trainer:
   # sample time steps
   T: 1000
-  beta: [0.0001, 0.02] #'cosine' #[0.0001, 0.02]
+  beta: 'cosine' #[0.0001, 0.02] #'cosine' #[0.0001, 0.02]
 
 
 ### callback params
 Callback:
   # The save path for checkpoint.
-  filepath: "./checkpoint/gedi_treecover_v4.pth"
+  filepath: "./checkpoint/gedi_treecover_v6.pth"
   # Frequency of checkpoint saving.
   save_freq: 1
 
 ### train params
 device: "cuda:0"
-epochs: 6  # 1000
+epochs: 20  # 1000
 # Whether to continue training, True or False
 consume: False
 # If continue training, which checkpoint to load
-consume_path: "./checkpoint/gedi_treecover_v4.pth"
+consume_path: "./checkpoint/gedi_treecover_v6.pth"
 
 ### optimizer params
 lr: 0.0002 #0.0002

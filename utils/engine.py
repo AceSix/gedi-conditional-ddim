@@ -21,19 +21,23 @@ def extract(v, i, shape):
 
 
 
-def cosine_beta_schedule(T: int, eps: float = 1e-5):
+def cosine_beta_schedule(T: int, s: float = 0.008, eps: float = 1e-5):
     """
     Nichol-Dhariwal cosine schedule with extra clamping so that
     0 < beta_t < 1  and  0 < alpha_bar_t <= 1  (avoids NaNs).
     """
-    steps      = torch.arange(T + 1, dtype=torch.float32)
-    alphas_bar = torch.cos(((steps / T) + 0.008) * math.pi / 2) ** 2
-    alphas_bar = alphas_bar / alphas_bar[0]              # ᾱ_0 = 1 exactly
+    steps = torch.arange(T + 1, dtype=torch.float32)
 
-    # --- clamp for numerical safety ---
-    alphas_bar.clamp_(min=eps, max=1.0)                 # 1-eps ≤ … ≤ 1
+    # 1) compute normalized cosine alpha_bar
+    alphas_bar = torch.cos(((steps / T + s) / (1 + s)) * math.pi / 2) ** 2
+    alphas_bar = alphas_bar / alphas_bar[0]  # ensure alpha_bar[0] == 1
+
+    # 2) clamp for numerical safety
+    alphas_bar.clamp_(min=eps, max=1.0)
+
+    # 3) recover betas
     betas = 1.0 - (alphas_bar[1:] / alphas_bar[:-1])
-    betas.clamp_(min=eps, max=1.0 - eps)                # keep 0<β<1
+    betas.clamp_(min=eps, max=1.0 - eps)
 
     return betas
 
@@ -78,7 +82,7 @@ class GaussianDiffusionTrainer(nn.Module):
         self.register_buffer("log_alpha_bar", torch.log(alpha_t_bar))
 
 
-    def forward(self, x_0, cond, drop_prob=0.2):
+    def forward(self, x_0, cond, drop_prob=0.25):
         # get a random training step $t \sim Uniform({1, ..., T})$
         B, dtype, device = x_0.size(0), x_0.dtype, x_0.device
         
@@ -209,8 +213,10 @@ class DDIMSampler(nn.Module):
         self.guidance_scale = guidance_scale # TODO: check cond
 
         # generate T steps of beta
-        beta_t = torch.linspace(*beta, T, dtype=torch.float32)
-        #beta_t = cosine_beta_schedule(T)
+        if isinstance(beta, str) and beta.lower() == "cosine":
+            beta_t = cosine_beta_schedule(T)
+        else:
+            beta_t = torch.linspace(*beta, T, dtype=torch.float32)
         
         # calculate the cumulative product of $\alpha$ , named $\bar{\alpha_t}$ in paper
         alpha_t = 1.0 - beta_t
@@ -293,7 +299,7 @@ class DDIMSampler(nn.Module):
                 x_t = self.sample_one_step(x_t, time_steps[i], time_steps_prev[i], eta, cond, guidance_scale)
 
                 if not only_return_x_0 and ((steps - i) % interval == 0 or i == 0):
-                    x.append(torch.clamp(x_t, -10.0, 10.0))
+                    x.append(torch.clamp(x_t, -10.0, 200.0))
 
                 sampling_steps.set_postfix(ordered_dict={"step": i + 1, "sample": len(x)})
 

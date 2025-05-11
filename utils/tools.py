@@ -31,7 +31,7 @@ def load_yaml(yml_path: Union[Path, str], encoding="utf-8"):
         return cfg
 
 
-def train_one_epoch(trainer, loader, val_loader, optimizer, device, epoch, ema, grad_clip=1.0):
+def train_one_epoch(trainer, loader, val_loader, optimizer, scheduler, device, epoch, ema, grad_clip=1.0):
     
     trainer.train()
     train_loss = 0.0
@@ -54,7 +54,8 @@ def train_one_epoch(trainer, loader, val_loader, optimizer, device, epoch, ema, 
             # optional gradient-clipping 
             #torch.nn.utils.clip_grad_norm_(trainer.parameters(), max_norm=grad_clip)
             optimizer.step()
-            #ema.update(trainer.model)
+            scheduler.step()
+            ema.update(trainer.model)
             optimizer.zero_grad()
 
             # update stats (detach frees the graph)

@@ -57,8 +57,8 @@ class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
 
 # use GN for norm layer, shape [B, C, L]
 def norm_layer(channels):
-    #return nn.GroupNorm(32, channels)
-    return nn.InstanceNorm1d(channels, affine=True)
+    return nn.GroupNorm(num_groups=32, num_channels=channels, affine=True)
+    #return nn.InstanceNorm1d(channels, affine=True)
 
 
 # Residual block adapted for 1D.
@@ -181,7 +181,7 @@ class UNet(nn.Module):
         self.num_heads = num_heads
 
         self.time_embed_dim = model_channels * 4
-        self.cond_embed_dim = model_channels * 4
+        self.cond_embed_dim = model_channels // 2
         self.emb_dim = self.time_embed_dim + self.cond_embed_dim # concatenate time and cond embeddings
 
         # Time embedding network.        
@@ -263,14 +263,6 @@ class UNet(nn.Module):
         cond_emb = self.cond_embed(cond)                  # gradients update MLP
         emb = torch.cat([time_emb, cond_emb], dim=1)
         
-        '''print("x shape:", x.shape)
-        print("x mean:", x.mean(), "std:", x.std())
-        print("time_emb shape:", time_emb.shape)
-        print("time_emb mean:", time_emb.mean(), "std:", time_emb.std())
-        print("time_emb min:", time_emb.min(), "max:", time_emb.max())
-        print("cond_emb shape:", cond_emb.shape)
-        print("cond_emb mean:", cond_emb.mean(), "std:", cond_emb.std())
-        print("cond_emb min:", cond_emb.min(), "max:", cond_emb.max())'''
         
         # Downsample stage.
         h = x
