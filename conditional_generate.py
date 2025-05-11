@@ -2,6 +2,7 @@ import math
 import torch
 import numpy as np
 from argparse import ArgumentParser
+from utils.ema import EMA
 from utils.engine import DDPMSampler, DDIMSampler
 from model.UNet import UNet
 from utils.tools import save_sample_image, save_image, save_sample_waveform_plot, save_waveform_plot
@@ -57,6 +58,10 @@ def generate(args):
         sampler = DDPMSampler(model, **cp["config"]["Trainer"]).to(device)
     else:
         raise ValueError(f"Unknown sampler: {args.sampler}")
+
+    ema = EMA(model, decay=0.9999)
+    ema.shadow = {k: v.to(device) for k, v in cp["ema_shadow"].items()}
+    ema.store(model)    # backs up raw weights & copies EMA→model
     
     # Parse the conditioning vector.
     # Expecting a comma-separated string converting to a list of floats.
@@ -93,12 +98,6 @@ def generate(args):
         print(f"z_t shape: {z_t.shape}")
     
     extra_param = dict(steps=args.steps, eta=args.eta, method=args.method)
-    # IMPORTANT: Pass the conditioning tensor to the sampler.
-    # Update: sampler now expects an extra "cond" argument.
-    # Print extra_params for debugging
-    #print("Debug - extra_params:")
-    #for key, value in extra_param.items():
-    #    print(f"  {key}: {value}")
     x = sampler(z_t, cond=cond_tensor, only_return_x_0=args.result_only, interval=args.interval, **extra_param)
     
     print(f"x shape: {x.shape}")
