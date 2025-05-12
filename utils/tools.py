@@ -31,7 +31,7 @@ def load_yaml(yml_path: Union[Path, str], encoding="utf-8"):
         return cfg
 
 
-def train_one_epoch(trainer, loader, val_loader, optimizer, scheduler, device, epoch, ema, grad_clip=1.0):
+def train_one_epoch(trainer, loader, optimizer, scheduler, device, epoch, ema, grad_clip=1.0):
     
     trainer.train()
     train_loss = 0.0
@@ -54,8 +54,8 @@ def train_one_epoch(trainer, loader, val_loader, optimizer, scheduler, device, e
             # optional gradient-clipping 
             #torch.nn.utils.clip_grad_norm_(trainer.parameters(), max_norm=grad_clip)
             optimizer.step()
-            scheduler.step()
-            ema.update(trainer.model)
+            #scheduler.step()
+            #ema.update(trainer.model)
             optimizer.zero_grad()
 
             # update stats (detach frees the graph)
@@ -95,7 +95,6 @@ def validate_one_epoch(trainer, loader, device, epoch):
 
                 t   = torch.randint(trainer.T, (B,), device=x_0.device)
                 eps = torch.randn_like(x_0, dtype=x_0.dtype)
-                eps = torch.clamp(eps, min=0.0)
 
                 # x_t from the forward‑diffusion equation
                 x_t = (extract(trainer.signal_rate, t, x_0.shape) * x_0 +

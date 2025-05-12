@@ -60,8 +60,8 @@ def generate(args):
         raise ValueError(f"Unknown sampler: {args.sampler}")
 
     ema = EMA(model, decay=0.9999)
-    ema.shadow = {k: v.to(device) for k, v in cp["ema_shadow"].items()}
-    ema.store(model)    # backs up raw weights & copies EMA→model
+    #ema.shadow = {k: v.to(device) for k, v in cp["ema_shadow"].items()}
+    #ema.store(model)    # backs up raw weights & copies EMA→model
     
     # Parse the conditioning vector.
     # Expecting a comma-separated string converting to a list of floats.
@@ -90,13 +90,11 @@ def generate(args):
              *cp["config"]["Dataset"]["image_size"]),
             device=device
         )
-        z_t = torch.clamp(z_t, min=0.0) 
     else:
         z_t = torch.randn(
             (args.batch_size, cp["config"]["Model"]["in_channels"], 512),
             device=device
         )
-        z_t = torch.clamp(z_t, min=0.0) 
         print(f"z_t shape: {z_t.shape}")
     
     extra_param = dict(steps=args.steps, eta=args.eta, method=args.method)

@@ -26,6 +26,7 @@ class GEDIDataset(Dataset):
 
         y = row['y_normalized']  # waveform y (normalized)
         y = torch.tensor(y, dtype=torch.float)
+        #y = y * 10
         #y = (y - 0.001953125) / 0.004507618 # already normalized in dataset
         y = y.unsqueeze(0) # (L, ) -> (1, L) # add channel, easier to work with conv1d
 
@@ -51,10 +52,10 @@ class GEDIDataset(Dataset):
         condition_values = np.array([row[col] for col in condition_columns[cond_col_mask]], dtype=np.float32)
         conditions = torch.tensor(condition_values, dtype=torch.float)
 
-        for i, cond_idx in enumerate(cond_col_mask):
-            min, max = condition_ranges[cond_idx]
-            range = max - min
-            conditions[i] = ((conditions[i] - min) / range) # standardize to [0, 1]
+        #for i, cond_idx in enumerate(cond_col_mask):
+        #    min, max = condition_ranges[cond_idx]
+        #    range = max - min
+        #    conditions[i] = ((conditions[i] - min) / range) # standardize to [0, 1]
 
         return y, conditions
 

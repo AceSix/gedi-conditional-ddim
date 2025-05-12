@@ -82,7 +82,7 @@ class GaussianDiffusionTrainer(nn.Module):
         self.register_buffer("log_alpha_bar", torch.log(alpha_t_bar))
 
 
-    def forward(self, x_0, cond, drop_prob=0.25):
+    def forward(self, x_0, cond, drop_prob=0.2):
         # get a random training step $t \sim Uniform({1, ..., T})$
         B, dtype, device = x_0.size(0), x_0.dtype, x_0.device
         
@@ -91,7 +91,6 @@ class GaussianDiffusionTrainer(nn.Module):
         
         # generate $\epsilon \sim N(0, 1)$
         epsilon = torch.randn_like(x_0, dtype=dtype)
-        epsilon = torch.clamp(epsilon, min=0.0)
 
         # predict the noise added from $x_{t-1}$ to $x_t$
         x_t = (extract(self.signal_rate, t, x_0.shape) * x_0 +
@@ -246,7 +245,7 @@ class DDIMSampler(nn.Module):
         # calculate x_{t-1}
         sigma_t = eta * torch.sqrt((1 - alpha_t_prev) / (1 - alpha_t) * (1 - alpha_t / alpha_t_prev))
         epsilon_t = torch.randn_like(x_t)
-        epsilon_t = torch.clamp(epsilon_t, min=0.0)
+        #epsilon_t = torch.clamp(epsilon_t, min=0.0) / 10.0
         x_t_minus_one = (
                 torch.sqrt(alpha_t_prev / alpha_t) * x_t +
                 (torch.sqrt(1 - alpha_t_prev - sigma_t ** 2) - torch.sqrt(

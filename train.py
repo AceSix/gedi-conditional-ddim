@@ -23,7 +23,8 @@ def train(config):
     start_epoch = 1
 
     model = UNet(**config["Model"]).to(device)
-    ema   = EMA(model, decay=0.9999)
+    ##ema   = EMA(model, decay=0.9999)
+    ema = None
     
     optimizer = torch.optim.AdamW(model.parameters(), 
                                   lr=config["lr"], 
@@ -40,7 +41,8 @@ def train(config):
         else:
             return max(0.0, float(total_steps - step) / float(max(1, total_steps - warmup_steps)))
 
-    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+    #scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+    scheduler = None
     
     trainer = GaussianDiffusionTrainer(model, **config["Trainer"]).to(device)
 
@@ -52,19 +54,19 @@ def train(config):
         start_epoch = cp["start_epoch"] + 1
 
     for epoch in range(start_epoch, config["epochs"] + 1):
-        loss = train_one_epoch(trainer, train_loader, val_loader, optimizer, scheduler, device, epoch, ema)
+        loss = train_one_epoch(trainer, train_loader, optimizer, scheduler, device, epoch, ema)
         
-        if epoch % 2 == 0:
-            # ------- validation every 3 epochs with EMA weights ----
-            ema.store(model)
+        if epoch % 1 == 0:
+            # ------- validation every 1 epochs with EMA weights ----
+            #ema.store(model)
             val_loss, val_gap = validate_one_epoch(trainer, val_loader, device, epoch)
-            ema.restore(model)
+            #ema.restore(model)
             print(f"[{datetime.now():%H:%M:%S}] Val loss: {val_loss:.5f}, Cond gap: {val_gap:.5f}")
 
         model_checkpoint.step(
             loss,
             model=model.state_dict(),
-            ema_shadow=ema.shadow,
+            #ema_shadow=ema.shadow,
             config=config,
             optimizer=optimizer.state_dict(),
             start_epoch=epoch,
