@@ -31,11 +31,11 @@ class GEDIDataset(Dataset):
         y = y.unsqueeze(0) # (L, ) -> (1, L) # add channel, easier to work with conv1d
 
         # Get features for conditioning
-        cond_col_mask = [5]
+        cond_col_mask = [0,1]
         condition_columns = np.array([
-            'geolocation/latitude_bin0',            # 0
-            'geolocation/longitude_bin0',           # 1
-            'geolocation/elevation_bin0',           # 2 y
+            'geolocation/latitude_bin0',            # 0 y
+            'geolocation/longitude_bin0',           # 1 
+            'geolocation/elevation_bin0',           # 2 
             'land_cover_data/landsat_treecover',    # 3
             'land_cover_data/modis_nonvegetated',   # 4
             'land_cover_data/modis_treecover'       # 5 y

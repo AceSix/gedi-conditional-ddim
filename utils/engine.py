@@ -257,7 +257,7 @@ class DDIMSampler(nn.Module):
 
     @torch.no_grad()
     def forward(self, x_t, steps: int = 1, method="linear", eta=0.1,
-                only_return_x_0: bool = True, interval: int = 1, cond = None, guidance_scale = None):
+                only_return_x_0: bool = True, interval: int = 1, cond = None, guidance_scale = None, progress_bar = True):
         """
         Parameters:
             x_t: Standard Gaussian noise. A tensor with shape (batch_size, channels, height, width).
@@ -295,7 +295,7 @@ class DDIMSampler(nn.Module):
         time_steps_prev = np.concatenate([[0], time_steps[:-1]])
 
         x = [x_t]
-        with tqdm(reversed(range(0, steps)), colour="#6565b5", total=steps) as sampling_steps:
+        with tqdm(reversed(range(0, steps)), colour="#6565b5", total=steps, disable=not progress_bar) as sampling_steps:
             for i in sampling_steps:
                 x_t = self.sample_one_step(x_t, time_steps[i], time_steps_prev[i], eta, cond, guidance_scale)
 

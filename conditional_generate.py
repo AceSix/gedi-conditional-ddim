@@ -99,6 +99,7 @@ def generate(args):
     
     extra_param = dict(steps=args.steps, eta=args.eta, method=args.method)
     x = sampler(z_t, cond=cond_tensor, only_return_x_0=args.result_only, interval=args.interval, **extra_param)
+    x = torch.flip(x, dims=[-1])
     
     print(f"x shape: {x.shape}")
     

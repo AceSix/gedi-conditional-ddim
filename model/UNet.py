@@ -58,7 +58,6 @@ class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
 # use GN for norm layer, shape [B, C, L]
 def norm_layer(channels):
     return nn.GroupNorm(num_groups=32, num_channels=channels, affine=True)
-    #return nn.InstanceNorm1d(channels, affine=True)
 
 
 # Residual block adapted for 1D.

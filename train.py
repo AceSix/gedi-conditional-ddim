@@ -29,7 +29,7 @@ def train(config):
     optimizer = torch.optim.AdamW(model.parameters(), 
                                   lr=config["lr"], 
                                   betas=(0.9, 0.999), 
-                                  weight_decay=3e-4)
+                                  weight_decay=1e-4)
 
     steps_per_epoch = len(train_loader)
     total_steps = config["epochs"] * steps_per_epoch
@@ -41,8 +41,8 @@ def train(config):
         else:
             return max(0.0, float(total_steps - step) / float(max(1, total_steps - warmup_steps)))
 
-    #scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
-    scheduler = None
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+    #scheduler = None
     
     trainer = GaussianDiffusionTrainer(model, **config["Trainer"]).to(device)
 

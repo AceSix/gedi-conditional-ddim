@@ -57,7 +57,7 @@ TestDataset:
   subset: 1
   #drop_last: True
   pin_memory: True
-  num_workers: 8
+  num_workers: 4
 
 
 ### trainer params
@@ -70,7 +70,7 @@ Trainer:
 ### callback params
 Callback:
   # The save path for checkpoint.
-  filepath: "./checkpoint/gedi_treecover_v6.pth"
+  filepath: "./checkpoint/gedi_lati.pth"
   # Frequency of checkpoint saving.
   save_freq: 1
 
@@ -80,7 +80,7 @@ epochs: 10  # 1000
 # Whether to continue training, True or False
 consume: False
 # If continue training, which checkpoint to load
-consume_path: "./checkpoint/gedi_treecover_v6.pth"
+consume_path: "./checkpoint/gedi_lati.pth"
 
 ### optimizer params
-lr: 0.0001 #0.0002
+lr: 0.0002 #0.0002

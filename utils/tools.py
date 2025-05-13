@@ -54,7 +54,7 @@ def train_one_epoch(trainer, loader, optimizer, scheduler, device, epoch, ema, g
             # optional gradient-clipping 
             #torch.nn.utils.clip_grad_norm_(trainer.parameters(), max_norm=grad_clip)
             optimizer.step()
-            #scheduler.step()
+            scheduler.step()
             #ema.update(trainer.model)
             optimizer.zero_grad()
 
