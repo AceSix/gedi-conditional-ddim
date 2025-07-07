@@ -9,7 +9,7 @@ Model:
   channel_mult: [1, 2, 4, 4]
   conv_resample: True
   num_heads: 4
-  cond_dim: 1
+  cond_dim: 88
 
 
 ### dataset params
@@ -20,7 +20,7 @@ TrainDataset:
   #train: True
   # Folder of data sets. When `dataset = custom`, this parameter can be a list with different folders.
   # Then all images in the list with suffixes in `suffix` in the folder will be loaded.
-  data_path: "./data/gedi/combined_df_train.pkl"
+  data_path: "../data/Segments/global_rh_prop_10kpp_p0.pkl"
   
   # If mnist and cifar datasets, whether to download it.
   #download: True
@@ -41,7 +41,7 @@ TrainDataset:
 
 ValDataset:
   dataset: "gedi"
-  data_path: "./data/gedi/combined_df_val.pkl"
+  data_path: "../data/Segments/global_rh_prop_10kpp_p1.pkl"
   # parameters for torch.utils.data.DataLoader
   batch_size: 128 #64
   subset: 1
@@ -51,7 +51,7 @@ ValDataset:
 
 TestDataset:
   dataset: "gedi"
-  data_path: "./data/gedi/combined_df_test.pkl"
+  data_path: "../data/Segments/global_rh_prop_10kpp_p2.pkl"
   # parameters for torch.utils.data.DataLoader
   batch_size: 128 #64
   subset: 1
@@ -75,8 +75,8 @@ Callback:
   save_freq: 1
 
 ### train params
-device: "cuda:0"
-epochs: 10  # 1000
+device: "cuda"
+epochs: 30  # 1000
 # Whether to continue training, True or False
 consume: False
 # If continue training, which checkpoint to load

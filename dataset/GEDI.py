@@ -1,9 +1,40 @@
+# -*- coding:utf-8 -*-
+###################################################################
+###   @FilePath: \gedi-conditional-ddim\dataset\GEDI.py
+###   @Author: AceSix
+###   @Date: 2025-07-06 18:15:39
+###   @LastEditors: AceSix
+###   @LastEditTime: 2025-07-07 02:22:31
+###   @Copyright (C) 2025 Brown U. All rights reserved.
+###################################################################
 import pandas as pd
 import torch
 from torch.utils.data import Dataset, DataLoader
 from pathlib import Path
 from typing import Union, Optional, Callable
 import numpy as np
+import pickle
+from sklearn.preprocessing import StandardScaler
+
+train_keys = [
+            'geolocation/latitude_bin0', 'geolocation/longitude_bin0',
+            'AnnualTemp', 'MeanDiurnal', 'Isothermality', 
+            'TempSeasonality', 'WarmestMTemp', 'ColdestMTemp', 'TempRange', 'WettestQTemp', 'DriestQTemp', 'WarmestQTemp', 'ColdestQTemp', 
+            'AnnualPrec', 'WettestMPrec', 'DriestMPrec', 'PrecSeasonality', 'WettestQPrec', 'DriestQPrec', 'WarmestQPrec', 'ColdestQPrec', 
+            'month_srad', 'month_vapr', 'month_wind',
+            'roughness', 'slope', 'elevation', 'lulc_human', 
+            'bdod_0-5cm_mean', 'bdod_100-200cm_mean', 'bdod_15-30cm_mean', 'bdod_30-60cm_mean', 'bdod_5-15cm_mean', 'bdod_60-100cm_mean', 
+            'cec_0-5cm_mean', 'cec_100-200cm_mean', 'cec_15-30cm_mean', 'cec_30-60cm_mean', 'cec_5-15cm_mean', 'cec_60-100cm_mean', 
+            'cfvo_0-5cm_mean', 'cfvo_100-200cm_mean', 'cfvo_15-30cm_mean', 'cfvo_30-60cm_mean', 'cfvo_5-15cm_mean', 'cfvo_60-100cm_mean', 
+            'clay_0-5cm_mean', 'clay_100-200cm_mean', 'clay_15-30cm_mean', 'clay_30-60cm_mean', 'clay_5-15cm_mean', 'clay_60-100cm_mean', 
+            'nitrogen_0-5cm_mean', 'nitrogen_100-200cm_mean', 'nitrogen_15-30cm_mean', 'nitrogen_30-60cm_mean', 'nitrogen_5-15cm_mean', 'nitrogen_60-100cm_mean', 
+            'ocd_0-5cm_mean', 'ocd_100-200cm_mean', 'ocd_15-30cm_mean', 'ocd_30-60cm_mean', 'ocd_5-15cm_mean', 'ocd_60-100cm_mean', 
+            'phh2o_0-5cm_mean', 'phh2o_100-200cm_mean', 'phh2o_15-30cm_mean', 'phh2o_30-60cm_mean', 'phh2o_5-15cm_mean', 'phh2o_60-100cm_mean', 
+            'sand_0-5cm_mean', 'sand_100-200cm_mean', 'sand_15-30cm_mean', 'sand_30-60cm_mean', 'sand_5-15cm_mean', 'sand_60-100cm_mean', 
+            'silt_0-5cm_mean', 'silt_100-200cm_mean', 'silt_15-30cm_mean', 'silt_30-60cm_mean', 'silt_5-15cm_mean', 'silt_60-100cm_mean', 
+            'soc_0-5cm_mean', 'soc_100-200cm_mean', 'soc_15-30cm_mean', 'soc_30-60cm_mean', 'soc_5-15cm_mean', 'soc_60-100cm_mean', 
+        ]
+
 
 class GEDIDataset(Dataset):
     def __init__(self, data_path: Union[str, Path, pd.DataFrame]):
@@ -13,50 +44,40 @@ class GEDIDataset(Dataset):
             waveform_transform: Optional transform to apply to the waveform arrays.
         """
         # Load the DataFrame if a path is provided.
-        self.df = pd.DataFrame(pd.read_pickle(data_path))
-        print(f"Loaded dataframe with {(self.df.shape[0])} rows")
-        
+        with open("../data/Segments/global_rh_prop_10kpp_p0.pkl", 'rb') as handle:
+            _, props = pickle.load(handle)
 
+        features = np.array([[p[k] for k in train_keys] for p in props])
+
+        self.data_scaler = StandardScaler()
+        self.data_scaler.fit(features)
+
+        with open(data_path, 'rb') as handle:
+            self.rhs, self.props = pickle.load(handle)
+        
+    def resample_array(self, arr, new_size):
+        x_old = np.linspace(0, 1, len(arr))
+        x_new = np.linspace(0, 1, new_size)
+        return np.interp(x_new, x_old, arr)
+    
     def __len__(self):
-        return len(self.df)
+        return len(self.rhs)
 
     def __getitem__(self, idx):
         # Retrieve the row from the DataFrame.
-        row = self.df.iloc[idx]
+        rh = self.rhs[idx]
+        prop = self.props[idx]
 
-        y = row['y_normalized']  # waveform y (normalized)
-        y = torch.tensor(y, dtype=torch.float)
-        #y = y * 10
-        #y = (y - 0.001953125) / 0.004507618 # already normalized in dataset
+        rh_resampled = self.resample_array(rh, 96)
+
+        y = torch.tensor(rh_resampled, dtype=torch.float)
         y = y.unsqueeze(0) # (L, ) -> (1, L) # add channel, easier to work with conv1d
 
         # Get features for conditioning
-        cond_col_mask = [0,1]
-        condition_columns = np.array([
-            'geolocation/latitude_bin0',            # 0 y
-            'geolocation/longitude_bin0',           # 1 
-            'geolocation/elevation_bin0',           # 2 
-            'land_cover_data/landsat_treecover',    # 3
-            'land_cover_data/modis_nonvegetated',   # 4
-            'land_cover_data/modis_treecover'       # 5 y
-        ])
-        condition_ranges = np.array([
-            [-90, 90],         # latitude 
-            [-180, 180],       # longitude
-            [0.0, 10000.0],    # elevation
-            [0.0, 100.0],      # landsat treecover
-            [0.0, 100.0],      # modis nonvegetated
-            [0.0, 100.0]       # modis treecover
-        ])
         
-        condition_values = np.array([row[col] for col in condition_columns[cond_col_mask]], dtype=np.float32)
-        conditions = torch.tensor(condition_values, dtype=torch.float)
-
-        #for i, cond_idx in enumerate(cond_col_mask):
-        #    min, max = condition_ranges[cond_idx]
-        #    range = max - min
-        #    conditions[i] = ((conditions[i] - min) / range) # standardize to [0, 1]
-
+        
+        condition_values = np.array([prop[col] for col in train_keys], dtype=np.float32)
+        conditions = torch.tensor(self.data_scaler.transform(condition_values[np.newaxis, :]), dtype=torch.float)[0]
         return y, conditions
 
 
