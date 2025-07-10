@@ -33,7 +33,7 @@ TrainDataset:
   #suffix: ["png", "jpg"]
 
   # parameters for torch.utils.data.DataLoader
-  batch_size: 192 #64
+  batch_size: 256 #64
   subset: 1
   #drop_last: True
   pin_memory: True
@@ -43,8 +43,8 @@ ValDataset:
   dataset: "gedi"
   data_path: "../data/Segments/global_rh_prop_10kpp_p1.pkl"
   # parameters for torch.utils.data.DataLoader
-  batch_size: 128 #64
-  subset: 1
+  batch_size: 1024 #64
+  subset: 0.01
   #drop_last: True
   pin_memory: True
   num_workers: 4
@@ -53,8 +53,8 @@ TestDataset:
   dataset: "gedi"
   data_path: "../data/Segments/global_rh_prop_10kpp_p2.pkl"
   # parameters for torch.utils.data.DataLoader
-  batch_size: 128 #64
-  subset: 1
+  batch_size: 1024 #64
+  subset: 0.01
   #drop_last: True
   pin_memory: True
   num_workers: 4

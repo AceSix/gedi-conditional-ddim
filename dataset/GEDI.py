@@ -4,7 +4,7 @@
 ###   @Author: AceSix
 ###   @Date: 2025-07-06 18:15:39
 ###   @LastEditors: AceSix
-###   @LastEditTime: 2025-07-07 02:22:31
+###   @LastEditTime: 2025-07-07 12:53:31
 ###   @Copyright (C) 2025 Brown U. All rights reserved.
 ###################################################################
 import pandas as pd
@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Union, Optional, Callable
 import numpy as np
 import pickle
+import sys
 from sklearn.preprocessing import StandardScaler
 
 train_keys = [
@@ -53,7 +54,15 @@ class GEDIDataset(Dataset):
         self.data_scaler.fit(features)
 
         with open(data_path, 'rb') as handle:
-            self.rhs, self.props = pickle.load(handle)
+            self.rhs, props = pickle.load(handle)
+
+        self.rhs = np.array([self.resample_array(rh, 96) for rh in self.rhs], dtype=np.float32)
+
+        self.features = np.array([[prop[k] for k in train_keys] for prop in props], dtype=np.float32)
+        self.features = self.data_scaler.transform(self.features)
+        print(self.rhs.shape)
+        print(self.features.shape)
+        sys.stdout.flush()
         
     def resample_array(self, arr, new_size):
         x_old = np.linspace(0, 1, len(arr))
@@ -66,7 +75,7 @@ class GEDIDataset(Dataset):
     def __getitem__(self, idx):
         # Retrieve the row from the DataFrame.
         rh = self.rhs[idx]
-        prop = self.props[idx]
+        feature = self.features[idx]
 
         rh_resampled = self.resample_array(rh, 96)
 
@@ -75,9 +84,7 @@ class GEDIDataset(Dataset):
 
         # Get features for conditioning
         
-        
-        condition_values = np.array([prop[col] for col in train_keys], dtype=np.float32)
-        conditions = torch.tensor(self.data_scaler.transform(condition_values[np.newaxis, :]), dtype=torch.float)[0]
+        conditions = torch.tensor(feature, dtype=torch.float)
         return y, conditions
 
 

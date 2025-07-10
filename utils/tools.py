@@ -40,7 +40,7 @@ def train_one_epoch(trainer, loader, optimizer, scheduler, device, epoch, ema, g
     optimizer.zero_grad()
     
     # each batch
-    with tqdm(loader, dynamic_ncols=True, colour="#ff924a") as data:
+    with tqdm(loader) as data:
         for images, cond in data:
             
             x_0 = images.to(device, non_blocking=True)
@@ -83,31 +83,32 @@ def validate_one_epoch(trainer, loader, device, epoch):
     val_n = 0
     
     with torch.no_grad():
-        for images, cond in loader:
-            x_0 = images.to(device, non_blocking=True)
-            cond = cond.to(device, non_blocking=True)
-            B = x_0.size(0)
-
-            # -------- ordinary ε‑prediction loss -----------------------------
-            with autocast('cuda', dtype=torch.bfloat16):
-                loss = trainer(x_0, cond, drop_prob=0.0)      # <‑‑ no dropout in eval
-                val_loss += loss.item() * B
-
-                t   = torch.randint(trainer.T, (B,), device=x_0.device)
-                eps = torch.randn_like(x_0, dtype=x_0.dtype)
-
-                # x_t from the forward‑diffusion equation
-                x_t = (extract(trainer.signal_rate, t, x_0.shape) * x_0 +
-                        extract(trainer.noise_rate , t, x_0.shape) * eps)
-
-                eps_c  = trainer.model(x_t, t, cond)   # conditional prediction
-                null_cond = torch.ones_like(cond) * -1.0
-                eps_uc = trainer.model(x_t, t, null_cond)   # unconditional prediction
-
-                gap = (eps_c - eps_uc).pow(2).mean(dim=[1, 2]).sqrt().mean()  # scalar
-                val_gap += gap.item() * B
-
-            val_n += B
+        with tqdm(loader) as data:
+            for images, cond in data:
+                x_0 = images.to(device, non_blocking=True)
+                cond = cond.to(device, non_blocking=True)
+                B = x_0.size(0)
+    
+                # -------- ordinary ε‑prediction loss -----------------------------
+                with autocast('cuda', dtype=torch.bfloat16):
+                    loss = trainer(x_0, cond, drop_prob=0.0)      # <‑‑ no dropout in eval
+                    val_loss += loss.item() * B
+    
+                    t   = torch.randint(trainer.T, (B,), device=x_0.device)
+                    eps = torch.randn_like(x_0, dtype=x_0.dtype)
+    
+                    # x_t from the forward‑diffusion equation
+                    x_t = (extract(trainer.signal_rate, t, x_0.shape) * x_0 +
+                            extract(trainer.noise_rate , t, x_0.shape) * eps)
+    
+                    eps_c  = trainer.model(x_t, t, cond)   # conditional prediction
+                    null_cond = torch.ones_like(cond) * -1.0
+                    eps_uc = trainer.model(x_t, t, null_cond)   # unconditional prediction
+    
+                    gap = (eps_c - eps_uc).pow(2).mean(dim=[1, 2]).sqrt().mean()  # scalar
+                    val_gap += gap.item() * B
+    
+                val_n += B
             
     return val_loss/val_n, val_gap/val_n
 
